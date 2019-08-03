@@ -1,7 +1,7 @@
 # -*- encoding: utf-8 -*-
 """
 
-@Project: ESIM
+@Project: SimpleFeeder
 @File   : Instance.py
 @Time   : "2019/8/2 11:29
 @Author  : ZuoquanGong
@@ -10,7 +10,8 @@
 
 """
 from typing import List, Tuple
-from ComponentCategory import LabelGroup, SentenceGroup, DenseFeatureGroup, SparseFeatureGroup
+# from ComponentCategory import LabelGroup, SentenceGroup, DenseFeatureGroup, SparseFeatureGroup
+from SimpleFeeder.ComponentCategory import LabelGroup, SentenceGroup, DenseFeatureGroup, SparseFeatureGroup
 
 
 # =============================================================================

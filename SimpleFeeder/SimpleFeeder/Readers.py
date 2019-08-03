@@ -1,7 +1,7 @@
 # -*- encoding: utf-8 -*-
 """
 
-@Project: ESIM
+@Project: SimpleFeeder
 @File   : Readers.py
 @Time   : "2019/8/2 10:47
 @Author  : ZuoquanGong
@@ -9,7 +9,9 @@
 @Software: PyCharm
 
 """
-from Instance import Instance
+# from Instance import Instance
+
+from SimpleFeeder.Instance import Instance
 from typing import List, Tuple
 import copy
 
