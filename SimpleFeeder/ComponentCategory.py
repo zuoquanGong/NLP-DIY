@@ -1,7 +1,7 @@
 # -*- encoding: utf-8 -*-
 """
 
-@Project: SimpleFeeder
+@Project: ESIM
 @File   : ComponentCategory.py
 @Time   : "2019/8/2 10:43
 @Author  : ZuoquanGong
@@ -10,8 +10,7 @@
 
 """
 
-# from Vocabulary import Vocabulary
-from SimpleFeeder.Vocabulary import Vocabulary
+from Vocabulary import Vocabulary
 
 
 # =============================================================================
