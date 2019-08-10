@@ -69,8 +69,9 @@ class Model(nn.Module):
 
         # 1.Embedding 层
         if self.has_pretrain:
+            input_ext = batch_inst.batch_tensor_dict_ext['sent:A']
             # input = self.embed_ext(input)
-            input = self.embed(input)+self.embed_ext(input)
+            input = self.embed(input)+self.embed_ext(input_ext)
         else:
             input = self.embed(input)
         if self.training:
