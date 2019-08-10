@@ -30,6 +30,7 @@ class Instance:
         if separators != '':
             # 对应着str类型的read_model
             line_list = []
+            # 按照separator按顺序分割句子，形成成分列表
             for separator in separators:
                 line = line.split(separator, 1)
                 if len(line) < 2:
@@ -54,14 +55,15 @@ class Instance:
                 continue
             component_split = component.split(':')
             assert len(component_split) == 2
+            string = [s for s in string.split(minicut) if s != '']
             if 'label' in component_split[0]:
-                self.attr[component] = LabelGroup(component_split[0], string.split(minicut))
+                self.attr[component] = LabelGroup(component_split[0], string)
             elif 'sent' in component_split[0]:
-                self.attr[component] = SentenceGroup(component_split[0], string.split(minicut))
+                self.attr[component] = SentenceGroup(component_split[0], string)
             elif 'dfeat' in component_split[0]:
-                self.attr[component] = DenseFeatureGroup(component_split[0], string.split(minicut))
+                self.attr[component] = DenseFeatureGroup(component_split[0], string)
             elif 'sfeat' in component_split[0]:
-                self.attr[component] = SparseFeatureGroup(component_split[0], string.split(minicut))
+                self.attr[component] = SparseFeatureGroup(component_split[0], string)
             else:
                 continue
 

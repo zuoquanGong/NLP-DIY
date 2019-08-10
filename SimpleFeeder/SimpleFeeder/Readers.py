@@ -14,6 +14,7 @@
 from SimpleFeeder.Instance import Instance
 from typing import List, Tuple
 import copy
+import re
 
 # SICK 数据集示例
 '''
@@ -25,25 +26,40 @@ def SICK_reader(path: str,
                 read_model: List or Tuple,
                 separator='\t',
                 minicut=' ',
-                has_header=True) -> List:
+                has_head=True,
+                txt_filter=None,
+                ) -> List:
+    # print('separator:', separator, 'end')
     inst_list = []
     with open(path, 'r', encoding='utf-8') as fin:
         for i, line in enumerate(fin.readlines()):
-            if has_header and i == 0:
+            if has_head and i == 0:
                 continue
             line = line.strip()
+            # 对文本进行过滤处理
+            if txt_filter is not None:
+                line = txt_filter(line)
             if line == '':
                 continue
-            # print(line)
             inst = Instance()
+
+            # 1.对应着list的read_model
             if isinstance(read_model, list):
                 line = line.split(separator)
-                # print(line)
-                # print(read_model)
-                assert len(line) == len(read_model)
+                if len(line) != len(read_model):  # 当读取模式与实际句子模式不匹配时，进行折衷处理
+                    print('Warning: wrong form of data.')
+                    print('The given form: ', read_model)
+                    print('The wrong form: ', line)
+                    if len(read_model) > len(line):
+                        for time in range(len(read_model)-len(line)):
+                            line.append('')
+
                 inst.load(line, read_model, minicut=minicut)
+
+            # 2.对应着string的read_model
             elif isinstance(read_model, tuple):
                 inst.load(line, read_model[0], minicut=minicut, separators=read_model[1])
+
             inst_list.append(inst)
     return inst_list
 
@@ -57,16 +73,20 @@ def POS_reader(path: str,
                 read_model: List,
                 separator=' ',
                 minicut='_',
-                has_header=False) -> List:
+                has_head=False,
+                txt_filter=None,
+               ) -> List:
     inst_list = []
     with open(path, 'r', encoding='utf-8') as fin:
         for i, line in enumerate(fin.readlines()):
-            if has_header and i == 0:
+            if has_head and i == 0:
                 continue
             line = line.strip()
+            # 对文本进行过滤处理
+            if txt_filter is not None:
+                line = txt_filter(line)
             if line == '':
                 continue
-            # print(line)
             inst = Instance()
             assert isinstance(read_model, list)
             line = line.split(separator)
@@ -77,7 +97,7 @@ def POS_reader(path: str,
             # print(words)
             tags = [unit[1] for unit in line]
             # print(tags)
-            line = [' '.join(words),' '.join(tags)]
+            line = [' '.join(words), ' '.join(tags)]
             inst.load(line, read_model, minicut=' ')
             inst_list.append(inst)
     return inst_list
@@ -98,16 +118,20 @@ def conllu_reader(path: str,
                 separator='\n',
                 minicut='\t',
                 filter_head_str='#',
-                has_header=False) -> List:
+                has_head=False,
+                txt_filter=None,
+                ) -> List:
     inst_list = []
-    components = []
     components_model = []
     for i in range(len(read_model)):
         components_model.append([])
     with open(path, 'r', encoding='utf-8') as fin:
         for i, line in enumerate(fin.read().split('\n\n')):
-            if has_header and i == 0:
+            if has_head and i == 0:
                 continue
+            # 对文本进行过滤处理
+            if txt_filter is not None:
+                line = txt_filter(line)
             if line == '':
                 continue
 

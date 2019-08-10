@@ -25,7 +25,7 @@ class Vocabulary(Dict):
             self.unknown = '<unknown>'
             self.pad_id = 0
             self.unknown_id = 1
-            self.id2item = [self.padding,self.unknown]
+            self.id2item = [self.padding, self.unknown]
         else:
             self.id2item = []
 

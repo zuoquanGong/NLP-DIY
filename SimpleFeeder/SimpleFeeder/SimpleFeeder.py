@@ -7,36 +7,35 @@
 @Author  : ZuoquanGong
 @Email  : 2754915212@qq.com
 @Software: PyCharm
-
 """
-# 本文件中定义的诸类，用于实现数据集无关化
-# 即只需提供数据集的组分、类别和文本格式就可以自动加载数据，
-# 并可以经过自动处理，直接将数据提供给模型
-# 组分表示例：{'label:0','','sent:0','sent:1','sfeat:0',''}
-# 实例句子：“相关   ### 丁磊创建了网易公司。  丁磊是网易公司创始人。 丁磊  -1”
-# 标注说明：label:0 ''     sent:0             sent:1       sfeat:0 ''
-# '' 部分将被省略掉，sfeat 代表 sparse feature，dfeat 代表 dense feature
 
 from typing import Dict
 import torch.nn as nn
 import numpy as np
 from torch import LongTensor, ByteTensor, FloatTensor
 from torch.autograd import Variable
+import torch
 import re
-
-# from ComponentCategory import LabelGroup, SentenceGroup, DenseFeatureGroup, SparseFeatureGroup
-# # from Readers import SICK_reader, POS_reader, conllu_reader
-# from Readers import *
-# from Vocabulary import Vocabulary
 
 from SimpleFeeder.ComponentCategory import LabelGroup, SentenceGroup, DenseFeatureGroup, SparseFeatureGroup
 # from Readers import SICK_reader, POS_reader, conllu_reader
 from SimpleFeeder.Readers import *
 from SimpleFeeder.Vocabulary import Vocabulary
 
+'''
+本文件中定义的诸类，用于实现数据集无关化
+即只需提供数据集的组分、类别和文本格式就可以自动加载数据，
+并可以经过自动处理，直接将数据提供给模型
+组分表示例：{'label:0','','sent:0','sent:1','sfeat:0',''}
+实例句子：“相关   ### 丁磊创建了网易公司。  丁磊是网易公司创始人。 丁磊  -1”
+标注说明：label:0 ''     sent:0             sent:1       sfeat:0 ''
+'' 部分将被省略掉，sfeat 代表 sparse feature，dfeat 代表 dense feature
+
+'''
+
 
 # =============================================================================
-#  InstanceList
+# 一、InstanceList
 # =============================================================================
 # 所有Instance的容器，相当于一个数据集
 # 可以在其中完成常规数据处理流程
@@ -62,7 +61,10 @@ class InstanceList(List):
              is_POS=False,
              separator='\t',
              minicut=' ',
-             no_fix=False):
+             no_fix=False,
+             has_head=True,
+             txt_filter=None):
+        # 第一部分：将string情况下的read_model进行解析
         if isinstance(read_model, str):
             p_component = re.compile('\[.*?\]')
             p_separator = re.compile('\].*?\[')
@@ -70,15 +72,26 @@ class InstanceList(List):
             components = [c[1:-1] for c in p_component.findall(read_model)]
             # print(components)
             # print(separators)
+            # 将read_model解析成 成分和分解符 两个部分
             read_model = (components, separators)
+        # 第二部分：查看reader类型是否为序列标注，这一类任务的语料词语和其标签往往相互嵌入，分解时需要特别处理
         if reader == POS_reader or is_POS or reader == conllu_reader:
             self.is_POS = True
         self.clear()
+        # 第三部分：是否对reader的默认参数进行更改
         if no_fix:
-            self.extend(reader(path, read_model))
+            self.extend(reader(path, read_model,
+                               txt_filter=txt_filter,
+                               has_head=has_head))
         else:
-            self.extend(reader(path, read_model, separator=separator, minicut=minicut))
+            self.extend(reader(path, read_model,
+                               separator=separator,
+                               minicut=minicut,
+                               txt_filter=txt_filter,
+                               has_head=has_head))
+        # 第四部分：制定indices，用于shuffle：洗牌时只打乱indices，而不是打乱整个instance list
         self.indices = list(range(len(self)))
+        # 第五部分：如果载入的时训练集，则设置训练标签
         if self.is_train:
             self.set_train()
         print("Loading is finished -- {} insts ".format(len(self)))
@@ -109,31 +122,45 @@ class InstanceList(List):
         if not self.is_train:
             print('warning: non-train data set has no such function: "load_sent_pretrain".')
             return
-        self.has_sent_pretrain = True
+        InstanceList.has_sent_pretrain = True
         idx = 0
         ext_vocab = Vocabulary()
         embed_dim = -1
         word2vec = []
+        ext_vocab[ext_vocab.padding] = ext_vocab.pad_id
+        ext_vocab[ext_vocab.unknown] = ext_vocab.unknown_id
+        sum_vec = 0
         with open(path, 'r', encoding='utf-8') as fin:
             for line in fin.readlines():
                 line.strip()
                 line = line.split()
-                if len(line) < 2:
+                if len(line) <= 2:
                     continue
 
                 # 测试用语
-                # if idx > 2000:  ####
+                # if idx > 20000:  ####
                 #     break
 
-                word, vec = line[0],line[1:]
+                word, vec = line[0], line[1:]
                 if embed_dim == -1:  # 判断vec维数是否合理
                     embed_dim = len(vec)
                 else:
                     assert embed_dim == len(vec), '词向量维度不一致'
 
-                ext_vocab[word] = idx
-                word2vec.append(np.array(vec))
+                ext_vocab[word] = idx+2
+                vec = np.array([float(unit) for unit in vec], dtype="float64")
+                if idx == 0:
+                    sum_vec = vec
+                else:
+                    sum_vec = np.add(sum_vec, vec)
+                word2vec.append(vec)
                 idx += 1
+        unknown_vec = sum_vec/len(word2vec)
+        word2vec.insert(0, unknown_vec)
+        pad_vec = np.zeros(embed_dim)
+        word2vec.insert(0, pad_vec)
+        # print(unknown_vec)
+        # print(pad_vec)
 
         oov_list = [word for word in SentenceGroup.vocab_group[key] if word not in ext_vocab]
         oov_count = len(oov_list)
@@ -145,14 +172,15 @@ class InstanceList(List):
         for i, vec in enumerate(word2vec):
             pretrain_weight[i] = vec
 
-        ext_embedding = nn.Embedding(len(ext_vocab),embed_dim)
+        pretrain_weight = pretrain_weight/np.std(pretrain_weight)
+        ext_embedding = nn.Embedding(len(ext_vocab), embed_dim, padding_idx=ext_vocab.pad_id)
         ext_embedding.weight.data.copy_(FloatTensor(pretrain_weight))
         ext_embedding.weight.requires_grad = False
         del word2vec
         del pretrain_weight
         SentenceGroup.ext_vocab_group[key] = ext_vocab
         SentenceGroup.ext_embed_group[key] = ext_embedding
-        print(SentenceGroup.ext_vocab_group[key])
+        # print(SentenceGroup.ext_vocab_group[key])
         SentenceGroup.txt2idx_ext()
 
         print('Extra_embedding is done.')
@@ -163,7 +191,11 @@ class InstanceList(List):
                        key='sent'):
         if not self.has_sent_pretrain:
             self.embed_dim = embed_dim
-        embed = nn.Embedding(len(SentenceGroup.vocab_group[key]), self.embed_dim)
+        embed = nn.Embedding(len(SentenceGroup.vocab_group[key]),
+                                 self.embed_dim,
+                                 padding_idx=SentenceGroup.vocab_group[key].pad_id)
+        zero_weight = torch.zeros((len(SentenceGroup.vocab_group[key]), self.embed_dim))
+        embed.weight.data.copy_(zero_weight)
         embed.weight.requires_grad = True
         SentenceGroup.embed_group[key] = embed
 
@@ -173,7 +205,10 @@ class InstanceList(List):
                         use_gpu=False,
                         device='cpu'):
         self.batch_size = batch_size
-        self.batch_num = len(self) // batch_size
+        if len(self) % batch_size == 0:
+            self.batch_num = len(self) // batch_size
+        else:
+            self.batch_num = len(self) // batch_size+1
 
         class BatchData:
             size = 0
@@ -186,7 +221,9 @@ class InstanceList(List):
 
         BatchData.size = self.batch_size
         for batch in range(self.batch_num):
-            batch_indices = self.indices[batch * batch_size:(batch + 1) * batch_size]
+            start = batch*batch_size
+            end = (batch+1)*batch_size if batch*self.batch_size < len(self) else len(self)
+            batch_indices = self.indices[start:end]
 
             batch_insts = [self[idx] for idx in batch_indices]
             batch_tensor_dict = {}
@@ -219,7 +256,7 @@ class InstanceList(List):
 
     # 8.输出标签个数
     def label_size(self,
-                   key: str) -> int:
+                   key='label') -> int:
         if key not in LabelGroup.vocab_group.keys():
             print('warning: "{}" is a wrong key, no such label.'.format(key))
             return 0
@@ -237,11 +274,12 @@ class InstanceList(List):
                     is_sparse=False,
                     device='cpu'):
         if is_sparse:
-            tensor = Variable(FloatTensor(len(in_list)).zero_())
+            tensor = Variable(FloatTensor(self.batch_size).zero_())
             for s, sparse in enumerate(in_list):
                 # print(sparse.value)
                 tensor[s] = sparse.value[0]
             # print(tensor)
+            tensor = tensor.to(device=device)
             return tensor
         elif not is_label:
             if not is_ext:
@@ -249,49 +287,67 @@ class InstanceList(List):
             else:
                 in_list = [attr.ext_value for attr in in_list]
             max_len = max([len(unit) for unit in in_list])
-            tensor = Variable(LongTensor(len(in_list), max_len).zero_())
-            mask = Variable(ByteTensor(len(in_list), max_len).zero_())
+            tensor = Variable(LongTensor(self.batch_size, max_len).zero_())
+            mask = Variable(ByteTensor(self.batch_size, max_len).zero_())
 
             for idx, unit in enumerate(in_list):
                 unit_len = len(unit)
                 tensor[idx, :unit_len] = LongTensor(unit)
                 mask[idx, :unit_len].fill_(1)
-            tensor.to(device=device)
-            mask.to(device=device)
-            return tensor, mask
+            tensor = tensor.to(device=device)
+            mask = mask.to(device=device)
+            if not is_ext:
+                return tensor, mask
+            else:
+                return tensor
         elif self.is_POS:
-            in_list = [attr.value for attr in in_list]
-            max_len = max([len(unit) for unit in in_list])
-            tensor = Variable(LongTensor(len(in_list), max_len).zero_())
-            mask = Variable(ByteTensor(len(in_list), max_len).zero_())
+            if not is_label:
+                in_list = [attr.value for attr in in_list]
+                max_len = max([len(unit) for unit in in_list])
+                tensor = Variable(LongTensor(self.batch_size, max_len).zero_())
+                mask = Variable(ByteTensor(self.batch_size, max_len).zero_())
 
-            for idx, unit in enumerate(in_list):
-                unit_len = len(unit)
-                tensor[idx, :unit_len] = LongTensor(unit)
-                mask[idx, :unit_len].fill_(1)
-            tensor.to(device=device)
-            mask.to(device=device)
-            return tensor, mask
+                for idx, unit in enumerate(in_list):
+                    unit_len = len(unit)
+                    tensor[idx, :unit_len] = LongTensor(unit)
+                    mask[idx, :unit_len].fill_(1)
+                tensor.to(device=device)
+                mask = mask.to(device=device)
+                return tensor, mask
+            else:
+                in_list = [attr.value for attr in in_list]
+                max_len = max([len(unit) for unit in in_list])
+                tensor = Variable(LongTensor(self.batch_size, max_len).zero_())
+
+                for idx, unit in enumerate(in_list):
+                    unit_len = len(unit)
+                    tensor[idx, :unit_len] = LongTensor(unit)
+                tensor.to(device=device)
+                return tensor
         else:
             label_size = len(LabelGroup.vocab_group[in_list[0].key])
-            tensor = Variable(LongTensor(len(in_list), label_size).zero_())
+            tensor = Variable(LongTensor(self.batch_size, label_size).zero_())
             for idx, label in enumerate(in_list):
                 for lid in range(label_size):
                     if lid == label.value[0]:
                         tensor[idx][lid] = 1
-            tensor.to(device=device)
+            tensor = tensor.to(device=device)
             return tensor
 
     def get_pretrain(self) -> Dict:
         embed = {}
         embed.update(SentenceGroup.embed_group)
-        # embed.update(DenseFeatureGroup.embed_group)
+        embed.update(DenseFeatureGroup.embed_group)
         # embed.update(SparseFeatureGroup.embed_group)
         return embed
 
     def get_pretrain_ext(self):
         embed = {}
         embed.update(SentenceGroup.ext_embed_group)
-        # embed.update(DenseFeatureGroup.embed_group)
-        # embed.update(SparseFeatureGroup.embed_group)
+        # embed.update(DenseFeatureGroup.ext_embed_group)
+        # embed.update(SparseFeatureGroup.ext_embed_group)
         return embed
+
+    def show_labels(self):
+        for label_item in LabelGroup.vocab_group.items():
+            print(label_item)

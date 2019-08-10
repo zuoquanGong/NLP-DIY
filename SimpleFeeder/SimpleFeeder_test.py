@@ -10,9 +10,11 @@
 
 """
 
+from functools import partial
 from SimpleFeeder.SimpleFeeder import InstanceList
 from SimpleFeeder.ComponentCategory import SentenceGroup, LabelGroup, SparseFeatureGroup, DenseFeatureGroup
 from SimpleFeeder.Readers import SICK_reader, POS_reader, conllu_reader
+
 
 # =============================================================================
 # Tests and Examples
@@ -24,6 +26,19 @@ from SimpleFeeder.Readers import SICK_reader, POS_reader, conllu_reader
 # 然后，进入流程，依次调用 InstanceList的 read、set_train、build_vocab、build_pretrain、txt2idx、batch_generator
 # batch_generator的输出即可以满足模型输入
 
+# 该函数用于附加的数据清洗
+def txt_filter(line,
+               char_filter=None,
+               line_filter_marker=None):
+    for char in line_filter_marker:
+        if char == line[0]:
+            return ''
+    for char in char_filter:
+        line = line.replace(char, '')
+    # line = line.replace('-', ' ')
+    return line
+
+
 if __name__ == "__main__":
     train = InstanceList(is_train=True)
 
@@ -34,8 +49,11 @@ if __name__ == "__main__":
     '''
     # path = 'G:\桌面\语料搜集\SICK.txt'
     # read_model = ['', 'sent:A', 'sent:B', '', 'label:entail']
+    # char_filter = []
+    # line_filter_marker = []
+    # filter_func = partial(txt_filter, char_filter=char_filter, line_filter_marker=line_filter_marker)
     # reader = SICK_reader
-    # train.read(path, read_model, reader=reader, separator='\t', minicut=' ')
+    # train.read(path, read_model, reader=reader, separator='\t', minicut=' ', txt_filter=filter_func)
 
     '''
     #has_relation   sentence_A  sentence_B  sparse_feature_dist
@@ -44,18 +62,24 @@ if __name__ == "__main__":
     '''
     # path = 'G:\桌面\语料搜集\opinion_relation.txt'
     # read_model = ['label:rel', 'sent:A', 'sent:B', 'sfeat_num:dist']
+    # char_filter = []
+    # line_filter_marker = []
+    # filter_func = partial(txt_filter, char_filter=char_filter, line_filter_marker=line_filter_marker)
     # reader = SICK_reader
-    # train.read(path, read_model, reader=reader, separator='\t', minicut=' ')
+    # train.read(path, read_model, reader=reader, separator='\t', minicut=' ', txt_filter=filter_func)
 
     '''
     #has_relation   sentence_A  sentence_B  sparse_feature_dist sparse_feature_polar
     1	环境 很 好 ， 在 夫子庙 景区 中心 ， 但 房间 设施 陈旧 ， 特别是 卫生间 座便 目不忍睹 ， 应该 换了 。	环境 很好	11 1
     0	环境 很 好 ， 在 夫子庙 景区 中心 ， 但 房间 设施 陈旧 ， 特别是 卫生间 座便 目不忍睹 ， 应该 换了 。	环境 陈旧	87 0
     '''
-    path = 'G:\桌面\语料搜集\opinion_relation2.txt'
-    read_model = '[label:rel]	[sent:A]	[sent:B]	[sfeat_num:dist] [sfeat:polar]'
-    reader = SICK_reader
-    train.read(path, read_model, reader=reader, separator='\t', minicut=' ')
+    # path = 'G:\桌面\语料搜集\opinion_relation2.txt'
+    # char_filter = []
+    # line_filter_marker = []
+    # filter_func = partial(txt_filter, char_filter=char_filter, line_filter_marker=line_filter_marker)
+    # read_model = '[label:rel]	[sent:A]	[sent:B]	[sfeat_num:dist] [sfeat:polar]'
+    # reader = SICK_reader
+    # train.read(path, read_model, reader=reader, separator='\t', minicut=' ', txt_filter=filter_func)
 
     '''
     上海_NR 浦东_NR 开发_NN 与_CC 法制_NN 建设_NN 同步_VV 
@@ -63,8 +87,11 @@ if __name__ == "__main__":
     '''
     # path = 'G:\桌面\语料搜集\pos.txt'
     # read_model = ['sent:word', 'label:tag']
+    # char_filter = []
+    # line_filter_marker = []
+    # filter_func = partial(txt_filter, char_filter=char_filter, line_filter_marker=line_filter_marker)
     # reader = POS_reader
-    # train.read(path, read_model, reader=reader, separator=' ', minicut='_')
+    # train.read(path, read_model, reader=reader, separator=' ', minicut='_', txt_filter=filter_func)
 
     '''
         # sent_id = train-s111
@@ -77,8 +104,23 @@ if __name__ == "__main__":
         '''
     # path = 'G:\桌面\语料搜集\conllu.txt'
     # read_model = ['', 'sent:A', '', 'dfeat:pos', '', '', '', 'label:dep', '', '']
+    # char_filter = []
+    # line_filter_marker = []
+    # filter_func = partial(txt_filter, char_filter=char_filter, line_filter_marker=line_filter_marker)
     # reader = conllu_reader
-    # train.read(path, read_model, reader, no_fix=True)
+    # train.read(path, read_model, reader, no_fix=True, txt_filter=filter_func)
+
+    '''
+    gold_label	sentence1_binary_parse	sentence2_binary_parse	sentence1_parse	sentence2_parse	sentence1	sentence2	captionID	pairID	label1	label2	label3	label4	label5
+    entailment	( ( ( An ( older women ) ) ( tending ( to ( a garden ) ) ) ) . )	( ( The lady ) ( has ( a garden ) ) )	(ROOT (NP (NP (DT An) (JJR older) (NNS women)) (VP (VBG tending) (PP (TO to) (NP (DT a) (NN garden)))) (. .)))	(ROOT (S (NP (DT The) (NN lady)) (VP (VBZ has) (NP (DT a) (NN garden)))))	An older women tending to a garden.	The lady has a garden	3437522515.jpg#3	3437522515.jpg#3r1e	entailment	entailment	entailment	neutral	entailment
+    '''
+    # path = 'G:\桌面\语料搜集\snli.txt'
+    # read_model = ['label:entail', 'sent:A', 'sent:B']+11*['']
+    # char_filter = ['(', ')']
+    # line_filter_marker = ['-']
+    # filter_func = partial(txt_filter, char_filter=char_filter, line_filter_marker=line_filter_marker)
+    # reader = SICK_reader
+    # train.read(path, read_model, reader=reader, separator='\t', minicut=' ', txt_filter=filter_func)
 
     print(train[0])
     print(train[1])
