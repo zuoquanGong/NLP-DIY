@@ -116,7 +116,7 @@ class InstanceList(List):
         if not self.is_train:
             print('warning: non-train data set has no such function: "load_sent_pretrain".')
             return
-        self.has_sent_pretrain = True
+        InstanceList.has_sent_pretrain = True
         idx = 0
         ext_vocab = Vocabulary()
         embed_dim = -1
@@ -142,7 +142,7 @@ class InstanceList(List):
                     assert embed_dim == len(vec), '词向量维度不一致'
 
                 ext_vocab[word] = idx+2
-                vec = np.array([float(unit) for unit in vec])
+                vec = np.array([float(unit) for unit in vec], dtype="float64")
                 if idx == 0:
                     sum_vec = vec
                 else:
@@ -166,6 +166,7 @@ class InstanceList(List):
         for i, vec in enumerate(word2vec):
             pretrain_weight[i] = vec
 
+        pretrain_weight = pretrain_weight/np.std(pretrain_weight)
         ext_embedding = nn.Embedding(len(ext_vocab), embed_dim, padding_idx=ext_vocab.pad_id)
         ext_embedding.weight.data.copy_(FloatTensor(pretrain_weight))
         ext_embedding.weight.requires_grad = False
@@ -289,7 +290,10 @@ class InstanceList(List):
                 mask[idx, :unit_len].fill_(1)
             tensor = tensor.to(device=device)
             mask = mask.to(device=device)
-            return tensor, mask
+            if not is_ext:
+                return tensor, mask
+            else:
+                return tensor
         elif self.is_POS:
             in_list = [attr.value for attr in in_list]
             max_len = max([len(unit) for unit in in_list])
